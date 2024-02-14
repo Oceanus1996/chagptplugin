@@ -9,7 +9,7 @@ complete：解释最终处理结果
     ‘json文件有问题’：json相关网址状态为200，但是网页本身不正常，出现空页面等情况
     ‘api文件不可读’：api url存在，但是网页本身不正常，出现空页面等情况
 url_parsed：
-    多次清洗出的原网址，或者网址主
+    多次清洗出的原网址，或者网址主页
 state：
     三次尝试失败，不同后缀出现的错误信息，按照数组位置，分别体现api_1,api_2,api_3的状态
             api_1 = f"{new_url}/{'.well-known/ai-plugin.json'}"

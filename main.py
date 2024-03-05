@@ -10,8 +10,8 @@ from bs4 import BeautifulSoup
 import yaml
 import math
 
-execl_path = r'C:\Users\rrm_a\PycharmProjects\pythonProject1\source\plugin.xlsx'
-df = pd.read_excel(execl_path)#df是已经阅读的json格式
+execl_path = r'C:\Users\rrm_a\Desktop\1\source\plugin.xlsx'
+df = pd.read_excel(execl_path)  # df是已经阅读的json格式
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
@@ -173,6 +173,7 @@ class Json:
 
     def write_to_excel(self,row_index:int,column:string,txt):
         df=pd.read_excel(execl_path)
+
         if txt is not None:
             df.at[row_index,column] = txt
         else:
@@ -506,13 +507,239 @@ class Json:
             count += 1
 
 
+    def clear_path(self,num):#从yaml链接中，清洗出path，然后将path进行测试，记录返回值
+        api_url=df['api_url']
+        complete=df['complete']
+        count = num
+        error_list= df['error']
+        #读取api内容
+        for api in api_url[num:]:
+            if complete[count]!='Y':
+                count+=1
+                continue
+            if error_list[count]=='wrong_req':
+                count += 1
+                continue
+            try:
+                response = requests.get(api,timeout=10)
+                time.sleep(random.randint(1,3))
+                if response.status_code==200:#成功取到
+                    content_type = response.headers.get('Content-Type')
+                    #处理不同格式
+                    print(count,'准备检测格式头',api,content_type)
+
+                    # if content_type is None:
+                    #     print(count, "Unsupported Content-Type")
+                    #     api_info = response.json()
+                    if api.endswith('.yaml') or api.endswith('.yml'):
+                        response_text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]', '', response.text)
+                        api_info = yaml.safe_load(response_text)
+                    elif 'application/json' in content_type:
+                        api_info = response.json()
+                    elif 'application/x-yaml' in content_type or 'text/yaml' in content_type:
+                        api_info = yaml.safe_load(response.text)
+                    else:
+                        print(count,"Unsupported Content-Type2")
+                        api_info = response.json()
+
+                    if api_info is None:#api取得不对
+                        print(count,'api info是0',api_info)
+                        count += 1
+                        continue
+
+                    print(self.handle_get(api_info,count))
 
 
+
+                else:
+                    print(count,'没有200回应',response.status_code)
+                    self.write_to_excel(count, 'redetect', response.status_code)  # 没有200回应
+            except requests.exceptions.Timeout as e:
+                print(count,'超时了')
+                self.write_to_excel(count, 'redetect', '超时了')  # 超时
+            except requests.exceptions.RequestException as e2:
+                print(count, '其他错误',e2)
+                self.write_to_excel(count, 'redetect', e2)  # 其他错误
+
+            count+=1
+
+    def handle_get(self,body,count):
+        # Given a list of API specifications, we'll write a function to extract the URLs for GET and POST requests
+        # Initialize a dictionary to hold the extracted URLs
+        urls = {"GET": [], "POST": []}
+
+        # Loop through each API spec
+        try:
+            # 尝试提取基础URL
+            base_url = body['servers'][0]['url']
+        except (KeyError, IndexError):
+            # 如果提取失败，打印消息并返回None
+            print(count,"无法提取基础URL，请检查OpenAPI规范文件。")
+            # self.write_to_excel(count,'error','base_url')
+            base_url = df['url_parsed'][count]
+            # return
+        paths = body['paths']  # 提取定义的路径
+        api_endpoints = []
+        idx=1
+        self.reset_df()
+
+
+       # 遍历每个路径和方法
+        for path, path_item in body['paths'].items():
+            for http_method in ['get', 'post']:
+                if http_method in path_item:
+                    full_url = f"{base_url}{path}"
+                    params = None
+                    data = None
+
+                    # 对于GET请求，提取查询参数
+                    if http_method == 'get':
+                        params = path_item[http_method].get('parameters', {})
+                        if params is not None:
+                            params=self.construct_params(params)
+
+                    # 对于POST请求，提取请求体
+                    elif http_method == 'post':
+                        request_body = path_item[http_method].get('requestBody', {})
+                        if 'content' in request_body and 'application/json' in request_body['content']:
+                            data = request_body['content']['application/json'].get('schema', {})
+                        # 添加判断条件，如果存在参数则提取参数的名称
+                    elif http_method in ['patch', 'put']:
+                        request_body = path_item[http_method].get('requestBody', {})
+                        if 'content' in request_body and 'application/json' in request_body['content']:
+                            data = request_body['content']['application/json'].get('schema', {})
+                    elif http_method == 'delete':
+                        # 对于 DELETE 请求不包含请求体
+                        pass
+
+                    request_1={
+                        'method': http_method.upper(),
+                        'path': path,
+                        'full_url': full_url,
+                        'params': params,
+                        'data': data
+                    }
+
+                    api_endpoints.append(request_1)
+                    print(idx,type(request_1),request_1)
+                    response = self.send_api_request(http_method.upper(), full_url, params, data)
+                    response_text=response.text
+                    if response.headers.get('Content-Type') == 'image/png':
+                        response_text='picture!'
+                    print(response.status_code, response_text)
+
+
+                    self.write_to_excel(count,f'request_{idx}', json.dumps(request_1))
+                    self.write_to_excel(count,f'response_{idx}',f'{response.status_code}{response_text}')
+
+                    idx+=1
+
+    def send_api_request(self,method, url, params=None, data=None):
+        """
+        发送API请求。
+
+        :param method: 请求方法，如'GET'或'POST'
+        :param url: 完整的API端点
+        :param params: GET请求的查询参数
+        :param data: POST请求的JSON数据体
+        :return: 响应对象
+        """
+        headers = {
+            'Content-Type': 'application/json',
+            # 如果需要的话，还可以添加其他如认证的头部
+        }
+        # 发送请求
+        if method == 'GET':
+            response = requests.get(url, params=params, headers=headers)
+        elif method == 'POST':
+            response = requests.post(url, json=data, headers=headers)
+        elif method == 'PUT':
+            response = requests.put(url, json=data, headers=headers)
+        elif method == 'PATCH':
+            response = requests.patch(url, json=data, headers=headers)
+        elif method == 'DELETE':
+            response = requests.delete(url, headers=headers)
+        else:
+            raise ValueError("请求方法只能是 'GET'、'POST'、'PUT'、'PATCH' 或 'DELETE'。")
+        return response
+
+    def construct_params(self,param_definition):
+        params = {}
+        for param in param_definition:
+            param_name = param['name']
+            param_required = param.get('required',False)
+            if param_required:
+                # 如果参数是必需的，可以根据实际情况设置参数值
+                param_value = 'default_value'
+                params[param_name] = param_value
+            else:
+                # 如果参数不是必需的，可以选择性地设置参数值，或者根据实际情况跳过该参数
+                pass
+        return params
+    def wrong_request(self):
+        error_list=df['error']
+        count =823
+        api_url = df['api_url']
+        url_parsed=df['url_parsed']
+        for api in api_url[count:]:
+            if error_list[count]!='wrong_req':
+                count+=1
+                continue
+            idx=1
+            for _ in range(7):
+                print(count,idx,df[f'request_{idx}'][count])
+
+                if df[f'request_{idx}'][count]!=None:
+                    request= str(df[f'request_{idx}'][count])
+                    if request.strip().lower() == 'nan':
+                        continue
+                    request_dict = json.loads(request)
+
+                    #发送请求
+                    full_url=request_dict.get('full_url')
+                    if full_url is None:
+                        full_url=f'{url_parsed[count]}{request_dict.get('path')}'
+                    print(request_dict)
+                    response = self.send_api_request(request_dict.get('method'), full_url, request_dict.get('params'), request_dict.get('data'))
+                    self.write_to_excel(count, f'response_{idx}', f'{response.status_code}{response.text}')
+                    print(response.status_code)
+                idx+=1
+            count+=1
+
+
+
+    def reset_df(self):
+
+        df['response_1'] = df['response_1'].astype('object')
+        df['response_2'] = df['response_2'].astype('object')
+        df['response_3'] = df['response_3'].astype('object')
+        df['response_4'] = df['response_4'].astype('object')
+        df['response_5'] = df['response_5'].astype('object')
+        df['response_6'] = df['response_6'].astype('object')
+        df['response_7'] = df['response_7'].astype('object')
+        df['response_8'] = df['response_8'].astype('object')
+        df['response_9'] = df['response_9'].astype('object')
+
+        df['request_1'] = df['request_1'].astype('object')
+        df['request_2'] = df['request_2'].astype('object')
+        df['request_3'] = df['request_3'].astype('object')
+        df['request_4'] = df['request_4'].astype('object')
+        df['request_5'] = df['request_5'].astype('object')
+        df['request_6'] = df['request_6'].astype('object')
+        df['request_7'] = df['request_7'].astype('object')
+        df['request_8'] = df['request_8'].astype('object')
+        df['request_9'] = df['request_9'].astype('object')
 
 
 if __name__=="__main__":
     a=Json()
-    a.verify_and_clear_api_info(0)#11,717 792
+    # print(pd.read_excel(execl_path)['request_1'][0])
+    a.clear_path(536)#143 535  #150 294 535 58
+    # a.wrong_request()
+
+
+
+    # a.verify_and_clear_api_info(0)#11,717 792
     # a.handle_list_2(0)
 
     # a.get_api_info(293)#82有问题，169有问题 292 325

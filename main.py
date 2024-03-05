@@ -707,6 +707,43 @@ class Json:
             count+=1
 
 
+    def request_result(self):
+        result= df['request_result']
+        complete=df['complete']
+        count =0
+        for _ in result:
+            if complete[count]!='Y':
+                count+=1
+                continue
+
+            success=False
+            for idx in range(1,38):
+                response = df[f'response_{idx}'][count]
+                if str(response).strip().lower() == 'nan':
+                    continue
+                res_code = response[:3]
+                res_content = response[3:]
+                print(res_code)
+                print(res_content)
+                if res_code == '200':
+                    try:
+                        json_dict = json.loads(res_content)
+                        if isinstance(json_dict, dict) and 'error' in json_dict :#只有这种情况是false，其余都是true
+                           continue
+                        success = True
+                    except ValueError:
+                        success = True
+                        pass
+
+                if success is True:
+                    self.write_to_excel(count,'request_result','success')
+                    break
+            if success is False:
+                self.write_to_excel(count, 'request_result', 'unsuccess')
+
+            count += 1
+
+
 
     def reset_df(self):
 
@@ -734,9 +771,20 @@ class Json:
 if __name__=="__main__":
     a=Json()
     # print(pd.read_excel(execl_path)['request_1'][0])
-    a.clear_path(536)#143 535  #150 294 535 58
+    # a.clear_path(536)#143 535  #150 294 535 58
     # a.wrong_request()
+    # a.request_result()
+    A={
+    "videoId": 'lrmDoJkZjns',
+    "segment": 1,
+    "includeTimestamp": True
+  }
 
+
+
+
+    A=a.send_api_request('POST',r"https://vcaption.maila.ai/api/transcription",None,A)
+    print(A.status_code,A.text)
 
 
     # a.verify_and_clear_api_info(0)#11,717 792

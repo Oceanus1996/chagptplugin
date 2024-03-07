@@ -768,23 +768,114 @@ class Json:
         df['request_9'] = df['request_9'].astype('object')
 
 
+    def check_name(self,num):
+        json_info=df['json_info']
+        complete= df['complete']
+        titles=df['title']
+        name_issue=df['name_issue']
+        count=num
+        for api in json_info[count:]:
+
+            if complete[count]!='api文件不可读' and complete[count]!='Y(有点问题）':
+                count+=1
+                continue
+            # print(count,'api,',api)
+            try:
+                # 尝试解析JSON字符串
+                api_dict = json.loads(api)
+                name = api_dict.get('name_for_human')
+                title=titles[count]
+                print(count, name,title, api_dict)
+                self.write_to_excel(count, 'name_for_human',name)
+                self.write_to_excel(count,'name_issue',name == title)
+
+            except json.decoder.JSONDecodeError:
+                # 如果捕获到JSON解析错误，可以选择记录错误、跳过当前循环迭代或执行其他操作
+                self.write_to_excel(count,'name_issue','_cannot parse')
+                print(f"JSON解析错误在索引 {count}: 无法解析数据。跳过并继续。")
+                # 可以在这里添加更多的错误处理逻辑，比如记录有问题的数据等
+
+            count+=1
+
+    def check_auth(self,num):
+        json_info=df['json_info']
+        complete = df['complete']
+        count=num
+        self.reset_df()
+        for api in json_info[num:]:
+            if complete[count]!='api文件不可读' and 'Y' not in complete[count] :
+                count+=1
+                continue
+
+            try:
+                json_dict = json.loads(api)
+                if 'auth' in json_dict:
+                    auth_info = json_dict['auth']
+                else:
+                    # 处理键不存在的情况
+                    # 例如，设置一个默认值或者抛出一个异常
+                    auth_info = "not exist"  # 或者 raise KeyError("auth key not found")
+                print(count,auth_info)
+                self.write_to_excel(count,'auth',str(auth_info))
+            except json.decoder.JSONDecodeError:
+                self.write_to_excel(count, 'auth', 'cannot parse')
+
+            count+=1
+
+    def check_auth_token(self,num):
+        auth_states=df['auth_state']
+        auth=df['auth']
+        api_info=df['api_info']
+        count=num
+        for auth_state in auth_states[count:]:
+            if auth_state!='有auth未施加影响':
+                count+=1
+                continue
+
+            if 'token' in auth[count] and api_info[count] is not None :
+                self.write_to_excel(count,'auth_state','token无效')
+
+            count+=1
+
+    def check_legal(self,num):
+        json_info = df['json_info']
+        complete = df['complete']
+        infos=df['info']
+        count = num
+        for api in json_info[count:]:
+            if complete[count] != 'api文件不可读' and complete[count] !='Y(有点问题）':
+                count += 1
+                continue
+            print(count,'api,',api)
+            try:
+                # 尝试解析JSON字符串
+                api_dict = json.loads(api)
+
+                if type(api_dict)!=dict or api_dict.get('legal_info_url') is None:
+                    self.write_to_excel(count,'legal_state','無legal的url')
+                    count+=1
+                    continue
+                legal_url = api_dict.get('legal_info_url')
+                self.write_to_excel(count, 'legal',legal_url)
+                self.write_to_excel(count, 'legal_state',legal_url==infos[count])
+                print(count,legal_url==infos[count],legal_url,infos[count])
+            except json.decoder.JSONDecodeError:
+                # 如果捕获到JSON解析错误，可以选择记录错误、跳过当前循环迭代或执行其他操作
+                print(f"JSON解析错误在索引 {count}: 无法解析数据。跳过并继续。")
+                self.write_to_excel(count, 'legal_state', '無法解析')
+                # 可以在这里添加更多的错误处理逻辑，比如记录有问题的数据等
+
+            count+=1
+
+
 if __name__=="__main__":
     a=Json()
+    a.check_legal(0)
+    # a.check_auth_token(0)
     # print(pd.read_excel(execl_path)['request_1'][0])
     # a.clear_path(536)#143 535  #150 294 535 58
     # a.wrong_request()
     # a.request_result()
-    A={
-    "videoId": 'lrmDoJkZjns',
-    "segment": 1,
-    "includeTimestamp": True
-  }
-
-
-
-
-    A=a.send_api_request('POST',r"https://vcaption.maila.ai/api/transcription",None,A)
-    print(A.status_code,A.text)
 
 
     # a.verify_and_clear_api_info(0)#11,717 792

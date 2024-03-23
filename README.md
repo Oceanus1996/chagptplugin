@@ -20,3 +20,15 @@ json_info 和 json_url：
 
 api_url、api_info 和 clear_api_info：
    成功得到json'信息后，解析的api网址（api_url），api的具体信息（api_info），清理掉‘responses’后的api具体信息（clear_api_info）
+
+update
+name_for_human，name_issue：抓取api内name的名字，與其在app中的名字比較
+legal	legal_state：抓取api内legal url的名字，與其在app中的名字比較
+auth	auth_state：構造request是否要求oauth授權，明令授權但是實際操作中無令牌也可觸達
+
+
+
+
+
+
+
